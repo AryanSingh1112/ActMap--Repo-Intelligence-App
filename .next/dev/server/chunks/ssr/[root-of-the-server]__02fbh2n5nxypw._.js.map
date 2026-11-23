@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 13, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/admin/Downloads/aactmap/app/favicon.ico.mjs%20(structured%20image%20object)"],"sourcesContent":["import src from \"IMAGE\";\nexport default { src, width: 48, height: 48 }\n"],"names":["src","width","height"],"mappings":";;;;AAAA;;uCACe;IAAEA,KAAAA,mIAAG;IAAEC,OAAO;IAAIC,QAAQ;AAAG"}},
+    {"offset": {"line": 28, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/admin/Downloads/aactmap/app/page.tsx"],"sourcesContent":["import { redirect } from \"next/navigation\";\n\n// The checked-in preview explorer is gone: analyses are stored now, and every\n// map lives at /analyses/[id]. The marketing page replaces this in a later phase.\nexport default function HomePage() {\n  redirect(\"/workspace\");\n}\n"],"names":["HomePage"],"mappings":";;;;AAAA;AAAA;;AAIe,SAASA;IACtB,IAAA,iMAAQ,EAAC;AACX"}}]
+}

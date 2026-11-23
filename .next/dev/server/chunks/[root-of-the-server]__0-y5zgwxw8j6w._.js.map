@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 106, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/admin/Downloads/aactmap/proxy.ts"],"sourcesContent":["\nimport {\n  clerkMiddleware,\n  createRouteMatcher,\n} from \"@clerk/nextjs/server\";\n\nconst isPublicRoute = createRouteMatcher([\n  \"/sign-in(.*)\",\n  \"/sign-up(.*)\",\n  \"/accept-invitation(.*)\",\n]);\n\nexport default clerkMiddleware(async (auth, request) => {\n  if (!isPublicRoute(request)) {\n    await auth.protect();\n  }\n});\n\nexport const config = {\n  matcher: [\n    \"/((?!_next|[^?]*\\\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)\",\n    \"/__clerk/:path*\",\n    \"/(api|trpc)(.*)\",\n  ],\n};\n"],"names":["isPublicRoute","auth","request","protect","config","matcher"],"mappings":";;;;;;AACA;AAAA;;AAKA,MAAMA,gBAAgB,IAAA,gMAAkB,EAAC;IACvC;IACA;IACA;CACD;uCAEc,IAAA,gMAAe,EAAC,OAAOC,MAAMC;IAC1C,IAAI,CAACF,cAAcE,UAAU;QAC3B,MAAMD,KAAKE,OAAO;IACpB;AACF;AAEO,MAAMC,SAAS;IACpBC,SAAS;QACP;QACA;QACA;KACD;AACH"}}]
+}

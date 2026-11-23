@@ -1,0 +1,35 @@
+{
+  "node": {
+    "00bb423d79b2d21550bc0a1abe5a424681e9fb14aa": {
+      "workers": {
+        "app/(workspace)/analyses/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/(workspace)/analyses/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/node_modules/@clerk/nextjs/dist/esm/app-router/keyless-actions.js [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/node_modules/@clerk/nextjs/dist/esm/app-router/server-actions.js [app-rsc] (ecmascript)\", ACTIONS_MODULE2 => \"[project]/app/(workspace)/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "exportedName": "deleteKeylessAction",
+      "filename": "node_modules/@clerk/nextjs/dist/esm/app-router/keyless-actions.js"
+    },
+    "0067ab40e6fa859386c271e94d1ba132b6f25a3cc9": {
+      "workers": {
+        "app/(workspace)/analyses/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/(workspace)/analyses/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/node_modules/@clerk/nextjs/dist/esm/app-router/keyless-actions.js [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/node_modules/@clerk/nextjs/dist/esm/app-router/server-actions.js [app-rsc] (ecmascript)\", ACTIONS_MODULE2 => \"[project]/app/(workspace)/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "exportedName": "invalidateCacheAction",
+      "filename": "node_modules/@clerk/nextjs/dist/esm/app-router/server-actions.js"
+    },
+    "404cac902b97e431ca4d1c0a87a41563cbaec50a1b": {
+      "workers": {
+        "app/(workspace)/analyses/[id]/page": {
+          "moduleId": "[project]/.next-internal/server/app/(workspace)/analyses/[id]/page/actions.js { ACTIONS_MODULE0 => \"[project]/node_modules/@clerk/nextjs/dist/esm/app-router/keyless-actions.js [app-rsc] (ecmascript)\", ACTIONS_MODULE1 => \"[project]/node_modules/@clerk/nextjs/dist/esm/app-router/server-actions.js [app-rsc] (ecmascript)\", ACTIONS_MODULE2 => \"[project]/app/(workspace)/actions.ts [app-rsc] (ecmascript)\" } [app-rsc] (server actions loader, ecmascript)",
+          "async": false
+        }
+      },
+      "exportedName": "rerunAnalysis",
+      "filename": "app/(workspace)/actions.ts"
+    }
+  },
+  "edge": {}
+}

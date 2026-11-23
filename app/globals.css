@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/* Colour tokens. Everything in the app, including the explorer, reads these,
+   so light, dark and system all work from one place. */
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #171717;
+  --surface: #fafafa;
+  --surface-2: #f4f4f5;
+  --border: #e4e4e7;
+  --muted: #52525b;
+  --subtle: #8b8b94;
+  --accent: #2563eb;
+  --accent-foreground: #ffffff;
+  --good: #047857;
+  --warn: #b45309;
+  --bad: #b91c1c;
+  --edge: #a1a1aa;
+  --grid: #e4e4e7;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0a0a0c;
+  --foreground: #ededed;
+  --surface: #111114;
+  --surface-2: #18181c;
+  --border: rgba(255, 255, 255, 0.1);
+  --muted: #a1a1aa;
+  --subtle: #71717a;
+  --accent: #3b82f6;
+  --accent-foreground: #ffffff;
+  --good: #4ade80;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --edge: #a1a1aa;
+  --grid: #1c1c20;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-edge: var(--edge);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Thin, quiet scrollbars for the explorer panes. */
+/*
+ * The interface is drawn a step smaller than the browser's 100%, so the map
+ * and its panels are not crowded. The map itself is left alone: its mouse
+ * maths works in real pixels. The right pane is scaled less than the rest,
+ * since it is the part that is read.
+ */
+.ui-scale {
+  zoom: 0.8;
+}
+
+.ui-scale-pane {
+  zoom: 0.92;
+}
+
+.quiet-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
