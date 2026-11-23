@@ -21,7 +21,7 @@ module.exports = mod;
 "use strict";
 
 return __turbopack_context__.a(async (__turbopack_handle_async_dependencies__, __turbopack_async_result__) => { try {
-/* __next_internal_action_entry_do_not_use__ [{"404cac902b97e431ca4d1c0a87a41563cbaec50a1b":{"name":"rerunAnalysis"},"6086fbb1ae05ecbadb935f89614b780454901a72e0":{"name":"analyseRepository"}},"app/(workspace)/actions.ts",""] */ __turbopack_context__.s([
+/* __next_internal_action_entry_do_not_use__ [{"4091d2e28a9d0f261840ad84bf5dbdb456c00512db":{"name":"rerunAnalysis"},"60f76287590564cc4aac1bbf4083a1a74feb6cf198":{"name":"analyseRepository"}},"app/(workspace)/actions.ts",""] */ __turbopack_context__.s([
     "analyseRepository",
     ()=>analyseRepository,
     "rerunAnalysis",
@@ -184,8 +184,8 @@ async function rerunAnalysis(analysisId) {
     analyseRepository,
     rerunAnalysis
 ]);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(analyseRepository, "6086fbb1ae05ecbadb935f89614b780454901a72e0", null);
-(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(rerunAnalysis, "404cac902b97e431ca4d1c0a87a41563cbaec50a1b", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(analyseRepository, "60f76287590564cc4aac1bbf4083a1a74feb6cf198", null);
+(0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$build$2f$webpack$2f$loaders$2f$next$2d$flight$2d$loader$2f$server$2d$reference$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["registerServerReference"])(rerunAnalysis, "4091d2e28a9d0f261840ad84bf5dbdb456c00512db", null);
 __turbopack_async_result__();
 } catch(e) { __turbopack_async_result__(e); } }, false);}),
 "[project]/lib/pipeline/github.ts [app-rsc] (ecmascript)", ((__turbopack_context__) => {
@@ -483,6 +483,7 @@ async function runPipeline(input) {
             stats: {
                 ...map.statistics,
                 adapter: map.framework,
+                detection: map.frameworkDetection,
                 routes: stored.routes,
                 parserVersion: map.repository.parserVersion,
                 schemaVersion: map.schemaVersion,
@@ -598,53 +599,25 @@ __turbopack_context__.s([
     ()=>summariseCoverage
 ]);
 ;
-const BATCH_SIZE = 500;
-// Batches are independent, so a few go over the wire at once.
-const PARALLEL_BATCHES = 4;
-function summariseCoverage(map) {
-    const unresolvedByReason = {};
-    for (const entry of map.coverage.entries){
-        if (entry.status !== "unresolved") continue;
-        unresolvedByReason[entry.reason] = (unresolvedByReason[entry.reason] ?? 0) + 1;
-    }
-    return {
-        total: map.coverage.total,
-        resolved: map.coverage.resolved,
-        external: map.coverage.external,
-        excluded: map.coverage.excluded,
-        unresolved: map.coverage.unresolved,
-        unresolvedByReason,
-        examples: map.coverage.unresolvedExamples.slice(0, 20).map((entry)=>({
-                sourceFile: entry.occurrence.sourceFile,
-                specifier: entry.occurrence.specifier,
-                line: entry.occurrence.line,
-                reason: entry.reason,
-                message: entry.message
-            }))
-    };
+const CHUNK = 500;
+const MAX_EXAMPLES = 20;
+function chunks(items, size = CHUNK) {
+    const out = [];
+    for(let i = 0; i < items.length; i += size)out.push(items.slice(i, i + size));
+    return out;
 }
-function chunk(items, size) {
-    const batches = [];
-    for(let index = 0; index < items.length; index += size){
-        batches.push(items.slice(index, index + size));
-    }
-    return batches;
+function fail(what, error) {
+    throw new Error(`Could not store ${what}: ${error.message}`);
 }
-/**
- * Writes the parsed map into files and edges. Safe to call again for a
- * re-run: the previous rows for this analysis are removed first.
- */ async function inBatches(items, write) {
-    const batches = chunk(items, BATCH_SIZE);
-    for(let index = 0; index < batches.length; index += PARALLEL_BATCHES){
-        await Promise.all(batches.slice(index, index + PARALLEL_BATCHES).map(write));
+async function storeRepositoryMap(supabase, { analysisId, organizationId, map }) {
+    // 1. Clear anything from an earlier run of this analysis.
+    {
+        const { error } = await supabase.from("files").delete().eq("analysis_id", analysisId).eq("organization_id", organizationId);
+        if (error) fail("the previous map", error);
     }
-}
-async function storeRepositoryMap(supabase, options) {
-    const { analysisId, organizationId, map } = options;
-    const removed = await supabase.from("files").delete().eq("analysis_id", analysisId).eq("organization_id", organizationId);
-    if (removed.error) throw new Error(`Clearing old files failed: ${removed.error.message}`);
+    // 2. Files. The returned ids are needed to wire up edges and routes.
     const idByPath = new Map();
-    await inBatches(map.files, async (batch)=>{
+    for (const batch of chunks(map.files)){
         const { data, error } = await supabase.from("files").insert(batch.map((file)=>({
                 organization_id: organizationId,
                 analysis_id: analysisId,
@@ -657,69 +630,94 @@ async function storeRepositoryMap(supabase, options) {
                 extension: file.extension,
                 kind: file.kind,
                 line_count: file.lineCount,
+                // load.ts reads name and role from here.
                 metadata: {
                     name: file.name,
                     role: file.role ?? null,
-                    ...file.exports ? {
-                        exports: file.exports
-                    } : {}
+                    exports: file.exports ?? null,
+                    fanIn: file.fanIn,
+                    fanOut: file.fanOut
                 }
             }))).select("id, path");
-        if (error) throw new Error(`Storing files failed: ${error.message}`);
+        if (error) fail("files", error);
         for (const row of data ?? [])idByPath.set(row.path, row.id);
-    });
+    }
+    // 3. Edges. One row per (source, target) pair.
     const edgeRows = [];
     for (const edge of map.edges){
         const source = idByPath.get(edge.sourceFile);
         const target = idByPath.get(edge.targetFile);
-        // The table forbids self-edges, and an edge to a file that was not
-        // stored would be an invented one. Both are skipped, never guessed at.
+        // An edge with a missing end would be invented. The table also forbids
+        // a file pointing at itself.
         if (!source || !target || source === target) continue;
         edgeRows.push({
             organization_id: organizationId,
             analysis_id: analysisId,
             source_file_id: source,
             target_file_id: target,
-            edge_type: edge.kinds[0] ?? "static",
+            edge_type: "import",
             metadata: {
                 kinds: edge.kinds,
-                occurrenceCount: edge.occurrenceCount
+                occurrenceCount: edge.occurrenceCount,
+                lines: edge.occurrences.map((o)=>o.line)
             }
         });
     }
-    // Edges and routes only need the file ids, so they are written together.
-    const routeRows = map.routes.map((route)=>{
-        const fileId = idByPath.get(route.sourceFile);
-        if (!fileId) return null;
-        return {
+    for (const batch of chunks(edgeRows)){
+        const { error } = await supabase.from("edges").insert(batch);
+        if (error) fail("edges", error);
+    }
+    // 4. Routes. A route whose file is unknown is dropped, never guessed.
+    const routeRows = [];
+    for (const route of map.routes){
+        const entry = idByPath.get(route.sourceFile);
+        if (!entry) continue;
+        routeRows.push({
             organization_id: organizationId,
             analysis_id: analysisId,
-            entry_file_id: fileId,
+            entry_file_id: entry,
+            route_type: route.method,
             path: [
                 route.pattern
             ],
-            route_type: "http",
             metadata: {
                 method: route.method,
                 pattern: route.pattern,
                 line: route.line
             }
-        };
-    }).filter((row)=>row !== null);
-    await Promise.all([
-        inBatches(edgeRows, async (batch)=>{
-            const { error } = await supabase.from("edges").insert(batch);
-            if (error) throw new Error(`Storing edges failed: ${error.message}`);
-        }),
-        inBatches(routeRows, async (batch)=>{
-            const { error } = await supabase.from("routes").insert(batch);
-            if (error) throw new Error(`Storing routes failed: ${error.message}`);
-        })
-    ]);
+        });
+    }
+    for (const batch of chunks(routeRows)){
+        const { error } = await supabase.from("routes").insert(batch);
+        if (error) fail("routes", error);
+    }
     return {
         files: idByPath.size,
         edges: edgeRows.length,
         routes: routeRows.length
+    };
+}
+function summariseCoverage(map) {
+    const { coverage } = map;
+    const unresolvedByReason = {};
+    for (const entry of coverage.entries){
+        if (entry.status !== "unresolved") continue;
+        unresolvedByReason[entry.reason] = (unresolvedByReason[entry.reason] ?? 0) + 1;
+    }
+    return {
+        total: coverage.total,
+        resolved: coverage.resolved,
+        external: coverage.external,
+        excluded: coverage.excluded,
+        unresolved: coverage.unresolved,
+        unresolvedByReason,
+        examples: coverage.unresolvedExamples.slice(0, MAX_EXAMPLES).map((entry)=>({
+                sourceFile: entry.occurrence.sourceFile,
+                specifier: entry.occurrence.specifier,
+                line: entry.occurrence.line,
+                reason: entry.reason,
+                message: entry.message
+            }))
     };
 }
 }),

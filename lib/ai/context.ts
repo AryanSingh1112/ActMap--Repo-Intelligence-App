@@ -1,4 +1,4 @@
-import { UNCLASSIFIED, genericRoleOfKind } from "../../parser/src/taxonomy/categories";
+import { UNCLASSIFIED, genericRoleOfKind } from "../../parser/taxonomy/categories";
 
 import { LIMITS } from "./config";
 import { cacheKey } from "./key";

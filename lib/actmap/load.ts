@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { UNCLASSIFIED, genericRoleOfKind } from "../../parser/src/taxonomy/categories";
+import { UNCLASSIFIED, genericRoleOfKind } from "../../parser/taxonomy/categories";
 import { ROLE_LABEL, isClassifierRole } from "../ai/roles";
 
 import type {

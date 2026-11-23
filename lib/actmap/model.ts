@@ -2,7 +2,7 @@ import {
   UNCLASSIFIED,
   genericRoleOfKind,
   taxonomyFor,
-} from "../../parser/src/taxonomy/categories";
+} from "../../parser/taxonomy/categories";
 
 import type { RepositoryEdge, RepositoryFile } from "../../types/actmap";
 

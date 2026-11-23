@@ -23,16 +23,8 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$analysis$2f$an
 var __TURBOPACK__imported__module__$5b$project$5d2f$components$2f$analysis$2f$rerun$2d$button$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/components/analysis/rerun-button.tsx [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$ai$2f$status$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/ai/status.ts [app-rsc] (ecmascript)");
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$actmap$2f$load$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/actmap/load.ts [app-rsc] (ecmascript)");
-(()=>{
-    const e = new Error("Cannot find module '../../../../lib/pipeline/stages'");
-    e.code = 'MODULE_NOT_FOUND';
-    throw e;
-})();
-(()=>{
-    const e = new Error("Cannot find module '../../../../lib/supabase/server'");
-    e.code = 'MODULE_NOT_FOUND';
-    throw e;
-})();
+var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pipeline$2f$stages$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/pipeline/stages.ts [app-rsc] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/supabase/server.ts [app-rsc] (ecmascript)");
 ;
 ;
 ;
@@ -83,7 +75,7 @@ async function Analysis({ params }) {
     if (!UUID.test(id)) (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$components$2f$navigation$2e$react$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["notFound"])();
     const { orgId } = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$clerk$2f$nextjs$2f$dist$2f$esm$2f$app$2d$router$2f$server$2f$auth$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["auth"])();
     if (!orgId) (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$client$2f$components$2f$navigation$2e$react$2d$server$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["redirect"])("/workspace");
-    const supabase = await createSupabaseServerClient();
+    const supabase = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabase$2f$server$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["createSupabaseServerClient"])();
     // Row-level security decides whether this analysis is visible at all. One
     // that belongs to another organization comes back empty, same as a bad id.
     const { data, error } = await supabase.from("analyses").select(`
@@ -133,7 +125,7 @@ async function Analysis({ params }) {
         ...data,
         project: Array.isArray(data.project) ? data.project[0] ?? null : data.project
     };
-    const { owner, repo } = splitRepositoryName(row.project?.repository_url ?? "", row.project?.name ?? "unknown");
+    const { owner, repo } = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$pipeline$2f$stages$2e$ts__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["splitRepositoryName"])(row.project?.repository_url ?? "", row.project?.name ?? "unknown");
     if (row.status !== "complete") {
         return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$rsc$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$components$2f$analysis$2f$analysis$2d$progress$2e$tsx__$5b$app$2d$rsc$5d$__$28$ecmascript$29$__["AnalysisProgress"], {
             analysisId: row.id,
