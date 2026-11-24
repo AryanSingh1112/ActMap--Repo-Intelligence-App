@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { assertPinned } from "../../lib/ai/config";
 import { CLASSIFIER_ROLES, STRUCTURAL_ROLES } from "../../lib/ai/roles";
@@ -38,10 +39,11 @@ test("the AI client is constructed in exactly one file", () => {
       if (["node_modules", ".next", ".git"].includes(name)) continue;
       const full = path.join(dir, name);
       if (statSync(full).isDirectory()) walk(full);
-      else if (/\.(ts|tsx)$/.test(name) && !full.includes("tests") && /new OpenAI\(/.test(readFileSync(full, "utf8"))) hits.push(path.relative(process.cwd(), full));
+      else if (/\.(ts|tsx)$/.test(name) && !full.includes("tests") && /new OpenAI\(/.test(readFileSync(full, "utf8"))) hits.push(full);
     }
   };
-  const projectRoot = path.resolve(process.cwd(), "..");
+  // Relative to this file, so the test passes from any working directory.
+  const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 for (const dir of ["lib", "app", "components", "evals", "scripts"]) {
   walk(path.join(projectRoot, dir));
