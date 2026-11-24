@@ -5,7 +5,7 @@ import test from "node:test";
 
 import { assertPinned } from "../../lib/ai/config";
 import { CLASSIFIER_ROLES, STRUCTURAL_ROLES } from "../../lib/ai/roles";
-import { parseRoles } from "../../lib/ai/service";
+import { parseRoles } from "../../lib/ai/parse-roles";
 
 test("the classifier can never return a structural role", () => {
   for (const structural of STRUCTURAL_ROLES) assert.equal((CLASSIFIER_ROLES as readonly string[]).includes(structural), false);
@@ -41,6 +41,15 @@ test("the AI client is constructed in exactly one file", () => {
       else if (/\.(ts|tsx)$/.test(name) && !full.includes("tests") && /new OpenAI\(/.test(readFileSync(full, "utf8"))) hits.push(path.relative(process.cwd(), full));
     }
   };
-  for (const dir of ["lib", "app", "components", "evals", "scripts"]) walk(path.join(process.cwd(), dir));
-  assert.deepEqual(hits.map((h) => h.replace(/\\/g, "/")), ["lib/ai/client.ts"]);
+  const projectRoot = path.resolve(process.cwd(), "..");
+
+for (const dir of ["lib", "app", "components", "evals", "scripts"]) {
+  walk(path.join(projectRoot, dir));
+}
+ assert.deepEqual(
+  hits.map((h) =>
+    path.relative(projectRoot, h).replace(/\\/g, "/"),
+  ),
+  ["lib/ai/client.ts"],
+);
 });

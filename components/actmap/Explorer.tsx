@@ -404,6 +404,7 @@ export default function Explorer({
         data={data}
         model={model}
         tab={tab}
+        analysisId={analysisId}
         selectedFile={selectedFile}
         selectedNode={selectedNode}
         insights={insights}

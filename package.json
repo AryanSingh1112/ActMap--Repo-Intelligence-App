@@ -2,27 +2,37 @@
   "name": "actmap",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "parser": "tsx parser/src/cli.ts",
-    "parser:test": "tsx --test parser/tests/*.test.ts"
+    "trace:check": "tsx --conditions=react-server scripts/trace-check.ts",
+    "parser:test": "tsx --test parser/tests/*.test.ts",
+    "agent:dev": "langgraphjs dev --port 2024 --no-browser",
+    "agent:typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.10.7",
+    "@langchain/core": "^1.5.1",
+    "@langchain/google": "^0.2.17",
+    "@langchain/langgraph": "^1.7.5",
+    "@langchain/openai": "^1.8.5",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
+    "deepagents": "^1.17.0",
     "langsmith": "^0.13.1",
     "next": "16.4.6",
     "openai": "^7.62.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tar": "^7.5.23",
-    "typescript": "^5.9.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@langchain/langgraph-cli": "^1.8.1",
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -31,6 +41,7 @@
     "eslint-config-next": "16.4.6",
     "supabase": "^3.2.0",
     "tailwindcss": "4.3.3",
-    "tsx": "^4.23.15"
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
   }
 }

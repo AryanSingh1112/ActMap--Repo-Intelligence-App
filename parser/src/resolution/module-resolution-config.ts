@@ -9,6 +9,11 @@ export interface ModuleResolutionConfig {
   diagnostics: readonly ts.Diagnostic[];
 }
 
+export interface ModuleResolutionConfigIndex {
+  rootPath: string;
+  configsByDirectory: Map<string, ModuleResolutionConfig>;
+}
+
 function parseModuleResolutionConfig(
   configPath: string,
 ): ModuleResolutionConfig {
@@ -86,10 +91,6 @@ export function loadModuleResolutionConfig(
   return parseModuleResolutionConfig(configPath);
 }
 
-/**
- * Discovers and parses TypeScript/JavaScript project configurations
- * inside the repository. Each configuration is parsed only once.
- */
 export function loadModuleResolutionConfigs(
   rootPath: string,
 ): ModuleResolutionConfig[] {
@@ -121,7 +122,6 @@ export function loadModuleResolutionConfigs(
     ),
   ];
 
-  // Prefer tsconfig.json when both config types exist in one directory.
   configPaths.sort((a, b) => {
     const directoryDifference =
       path.dirname(a).length - path.dirname(b).length;
@@ -157,34 +157,16 @@ export function loadModuleResolutionConfigs(
   return [...configsByDirectory.values()];
 }
 
-/**
- * Returns the nearest applicable configuration for a source file.
- *
- * A null result means no configuration was found in the source
- * directory or any of its parent directories inside the repository.
- */
-export function findModuleResolutionConfigForFile(
-  sourceFile: string,
+export function createModuleResolutionConfigIndex(
   rootPath: string,
   configs: ModuleResolutionConfig[],
-): ModuleResolutionConfig | null {
+): ModuleResolutionConfigIndex {
   const absoluteRoot = path.resolve(rootPath);
-  const absoluteSource = path.resolve(absoluteRoot, sourceFile);
 
-  const relativeSource = path.relative(
-    absoluteRoot,
-    absoluteSource,
-  );
-
-  if (
-    relativeSource === ".." ||
-    relativeSource.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativeSource)
-  ) {
-    return null;
-  }
-
-  const configsByDirectory = new Map<string, ModuleResolutionConfig>();
+  const configsByDirectory = new Map<
+    string,
+    ModuleResolutionConfig
+  >();
 
   for (const config of configs) {
     if (!config.configPath) {
@@ -197,16 +179,52 @@ export function findModuleResolutionConfigForFile(
     );
   }
 
+  return {
+    rootPath: absoluteRoot,
+    configsByDirectory,
+  };
+}
+
+export function findModuleResolutionConfigForFile(
+  sourceFile: string,
+  rootPath: string,
+  configs: ModuleResolutionConfig[],
+): ModuleResolutionConfig | null {
+  return findModuleResolutionConfigUsingIndex(
+    sourceFile,
+    createModuleResolutionConfigIndex(rootPath, configs),
+  );
+}
+
+export function findModuleResolutionConfigUsingIndex(
+  sourceFile: string,
+  index: ModuleResolutionConfigIndex,
+): ModuleResolutionConfig | null {
+  const absoluteSource = path.resolve(index.rootPath, sourceFile);
+
+  const relativeSource = path.relative(
+    index.rootPath,
+    absoluteSource,
+  );
+
+  if (
+    relativeSource === ".." ||
+    relativeSource.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeSource)
+  ) {
+    return null;
+  }
+
   let currentDirectory = path.dirname(absoluteSource);
 
   while (true) {
-    const config = configsByDirectory.get(currentDirectory);
+    const config = index.configsByDirectory.get(currentDirectory);
 
     if (config) {
       return config;
     }
 
-    if (currentDirectory === absoluteRoot) {
+    if (currentDirectory === index.rootPath) {
       break;
     }
 
@@ -215,8 +233,8 @@ export function findModuleResolutionConfigForFile(
     if (
       parentDirectory === currentDirectory ||
       !(
-        parentDirectory === absoluteRoot ||
-        parentDirectory.startsWith(`${absoluteRoot}${path.sep}`)
+        parentDirectory === index.rootPath ||
+        parentDirectory.startsWith(`${index.rootPath}${path.sep}`)
       )
     ) {
       break;

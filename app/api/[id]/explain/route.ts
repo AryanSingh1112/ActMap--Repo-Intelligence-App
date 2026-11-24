@@ -1,6 +1,6 @@
-import { flushTraces } from "../../../../../lib/ai/client";
-import { handle } from "../../../../../lib/ai/request";
-import { HttpError, explainFile, explainFolder } from "../../../../../lib/ai/service";
+import { flushTraces } from "../../../../lib/ai/client";
+import { handle } from "../../../../lib/ai/request";
+import { HttpError, explainFile, explainFolder } from "../../../../lib/ai/service";
 
 export const maxDuration = 120;
 

@@ -1,5 +1,5 @@
-import { handle } from "../../../../../lib/ai/request";
-import { HttpError, checkStaleness } from "../../../../../lib/ai/service";
+import { handle } from "../../../../lib/ai/request";
+import { HttpError, checkStaleness } from "../../../../lib/ai/service";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const body = (await request.json().catch(() => ({}))) as { paths?: unknown };

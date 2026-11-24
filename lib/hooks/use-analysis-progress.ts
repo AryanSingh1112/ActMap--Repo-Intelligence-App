@@ -13,10 +13,12 @@ type RowState = ProgressEvent & { updated_at?: string | null };
  * The fast path is the private channel: a database trigger pushes every change
  * the moment it is written. Because a socket can fail to open (a missing
  * channel policy, a dropped connection, a sleeping laptop), the same row is also
- * read every couple of seconds while the run is unfinished, so the page keeps
- * moving either way. A finished run stops being read.
+ * read every few seconds while the run is unfinished, so the page keeps
+ * moving either way. A finished run stops being read, and so does a run that
+ * has not moved for several minutes, since it has probably stopped.
  */
-const FALLBACK_INTERVAL_MS = 1000;
+const FALLBACK_INTERVAL_MS = 3000;
+const STALE_AFTER_MS = 10 * 60 * 1000;
 const TERMINAL = new Set(["complete", "failed", "cancelled"]);
 
 export function useAnalysisProgress(
@@ -41,7 +43,12 @@ export function useAnalysisProgress(
     async function connect() {
       if (!supabase) return;
 
-      await supabase.realtime.setAuth();
+      try {
+        await supabase.realtime.setAuth();
+      } catch {
+        // Without a channel the polling below still keeps the page moving.
+        return;
+      }
       if (cancelled) return;
 
       for (const id of ids) {
@@ -60,7 +67,8 @@ export function useAnalysisProgress(
       }
     }
 
-    async function readRow(id: string) {
+    /** Reads one row. Returns its status, and whether it has stopped moving. */
+    async function readRow(id: string): Promise<{ status: string; stale: boolean } | null> {
       if (!supabase) return null;
 
       const { data } = await supabase
@@ -79,7 +87,10 @@ export function useAnalysisProgress(
         updated_at: data.updated_at,
       });
 
-      return data.status as string;
+      const updated = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+      const stale = updated > 0 && Date.now() - updated > STALE_AFTER_MS;
+
+      return { status: data.status as string, stale };
     }
 
     const waiting = new Set(ids);
@@ -91,8 +102,8 @@ export function useAnalysisProgress(
 
       try {
         for (const id of [...waiting]) {
-          const status = await readRow(id);
-          if (status && TERMINAL.has(status)) waiting.delete(id);
+          const row = await readRow(id);
+          if (row && (TERMINAL.has(row.status) || row.stale)) waiting.delete(id);
         }
       } catch {
         // A failed read is retried on the next tick.

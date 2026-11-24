@@ -55,7 +55,7 @@ export function ExplainProvider({
     (key: string, body: Record<string, unknown>, stalePaths: string[]) => {
       setEntries((current) => (current[key]?.status === "loading" ? current : { ...current, [key]: { status: "loading" } }));
 
-      const base = `/api/analyses/${analysisId}`;
+     const base = `/api/${analysisId}`;
 
       post<ExplanationResult>(`${base}/explain`, body)
         .then((result) => {

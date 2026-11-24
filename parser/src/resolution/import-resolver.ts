@@ -3,7 +3,6 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import * as ts from "typescript";
 
-import { findModuleResolutionConfigForFile } from "./module-resolution-config";
 import type { ModuleResolutionConfig } from "./module-resolution-config";
 
 import type {
@@ -76,6 +75,68 @@ function makeEntry(
   message: string | null = null,
 ): ImportCoverageEntry {
   return { occurrence, status, reason, resolvedPath, packageName, message };
+}
+
+function createConfigDirectoryIndex(
+  configs: ModuleResolutionConfig[] = [],
+): Map<string, ModuleResolutionConfig> {
+  const index = new Map<string, ModuleResolutionConfig>();
+
+  for (const config of configs) {
+    if (!config.configPath) continue;
+
+    index.set(
+      path.resolve(path.dirname(config.configPath)),
+      config,
+    );
+  }
+
+  return index;
+}
+
+function findModuleConfig(
+  sourceFile: string,
+  rootPath: string,
+  configsByDirectory: Map<string, ModuleResolutionConfig>,
+): ModuleResolutionConfig | null {
+  const absoluteRoot = path.resolve(rootPath);
+  const absoluteSource = path.resolve(absoluteRoot, sourceFile);
+
+  const relativeSource = path.relative(absoluteRoot, absoluteSource);
+
+  if (
+    relativeSource === ".." ||
+    relativeSource.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeSource)
+  ) {
+    return null;
+  }
+
+  let currentDirectory = path.dirname(absoluteSource);
+
+  while (true) {
+    const config = configsByDirectory.get(currentDirectory);
+
+    if (config) return config;
+
+    if (currentDirectory === absoluteRoot) break;
+
+    const parentDirectory = path.dirname(currentDirectory);
+
+    if (
+      parentDirectory === currentDirectory ||
+      !(
+        parentDirectory === absoluteRoot ||
+        parentDirectory.startsWith(`${absoluteRoot}${path.sep}`)
+      )
+    ) {
+      break;
+    }
+
+    currentDirectory = parentDirectory;
+  }
+
+  return null;
 }
 
 function getRepositoryRelativePath(
@@ -172,14 +233,13 @@ function resolveWithTypeScript(
   knownFiles: Set<string>,
   skippedFiles: Map<string, SkippedFile>,
   excludedDirectories: string[],
+  configsByDirectory: Map<string, ModuleResolutionConfig>,
 ): ImportCoverageEntry | null {
-  const config = options.moduleResolutionConfigs
-    ? findModuleResolutionConfigForFile(
-        occurrence.sourceFile,
-        options.rootPath,
-        options.moduleResolutionConfigs,
-      )
-    : null;
+  const config = findModuleConfig(
+    occurrence.sourceFile,
+    options.rootPath,
+    configsByDirectory,
+  );
 
   const compilerOptions = config?.compilerOptions ?? options.compilerOptions;
   if (!compilerOptions) return null;
@@ -563,6 +623,10 @@ export function resolveImports(
   occurrences: ImportOccurrence[],
   options: ImportResolverOptions,
 ): ImportResolverResult {
+  const configsByDirectory = createConfigDirectoryIndex(
+    options.moduleResolutionConfigs,
+  );
+
   const knownFiles = new Set(options.knownFiles.map(normalizeRelativePath));
 
   const skippedFiles = new Map(
@@ -623,6 +687,7 @@ export function resolveImports(
       knownFiles,
       skippedFiles,
       excludedDirectories,
+      configsByDirectory,
     );
 
     if (compilerResult) {

@@ -23,7 +23,7 @@ export function useRoleLabelling(options: { analysisId: string; needed: boolean;
     attempted.add(analysisId);
     setState("running");
 
-    fetch(`/api/analyses/${analysisId}/roles`, { method: "POST" })
+    fetch(`/api/${analysisId}/roles`, { method: "POST" })
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
         setState("idle");

@@ -17,3 +17,14 @@ npm-debug.log*
 
 # OS files
 .DS_Store
+
+# LangGraph API
+.langgraph_api
+
+.next/
+benchmark-results/
+*-run-*.json
+
+# Local benchmark and build artifacts
+*-timing.json
+*.tsbuildinfo

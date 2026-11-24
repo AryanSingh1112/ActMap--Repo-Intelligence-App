@@ -132,4 +132,131 @@ describe("import extractor", () => {
     assert.equal(result.imports[0].kind, "dynamic");
     assert.equal(result.imports[0].specifier, "./lazy");
   });
+
+  it("extracts CommonJS require imports", () => {
+    const result = extractImports(
+      "src/index.ts",
+      [
+        'const express = require("express");',
+        'const utils = require("./utils");',
+      ].join("\n"),
+    );
+
+    assert.equal(result.imports.length, 2);
+
+    assert.deepEqual(
+      result.imports.map((item) => item.specifier),
+      ["express", "./utils"],
+    );
+
+    assert.ok(
+      result.imports.every((item) => item.kind === "require"),
+    );
+  });
+
+  it("ignores computed require calls", () => {
+    const result = extractImports(
+      "src/index.ts",
+      [
+        'const name = "./module";',
+        "const module = require(name);",
+        'const other = require("./module", "extra");',
+      ].join("\n"),
+    );
+
+    assert.equal(result.imports.length, 0);
+  });
+
+  it("does not treat property methods named require as imports", () => {
+    const result = extractImports(
+      "src/index.ts",
+      'const value = loader.require("./module");',
+    );
+
+    assert.equal(result.imports.length, 0);
+  });
+
+  it("extracts CommonJS exports", () => {
+    const result = extractImports(
+      "src/index.js",
+      [
+        "exports.foo = foo;",
+        "module.exports.bar = bar;",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(result.commonJsExports, ["bar", "foo"]);
+  });
+
+  it("extracts object properties assigned to module.exports", () => {
+    const result = extractImports(
+      "src/index.js",
+      "module.exports = { foo, bar: value, baz() {} };",
+    );
+
+    assert.deepEqual(
+      result.commonJsExports,
+      ["bar", "baz", "foo"],
+    );
+  });
+
+  it("ignores non-export assignments", () => {
+    const result = extractImports(
+      "src/index.js",
+      [
+        "const exports = {};",
+        "object.foo = value;",
+        "module.other = value;",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(result.commonJsExports, []);
+  });
+
+  it("extracts top-level directives", () => {
+    const result = extractImports(
+      "src/index.ts",
+      [
+        '"use client";',
+        '"use strict";',
+        "const value = 10;",
+        '"use server";',
+      ].join("\n"),
+    );
+
+    assert.deepEqual(
+      result.directives,
+      ["use client", "use strict"],
+    );
+  });
+
+  it("does not extract import-like text from template strings", () => {
+    const result = extractImports(
+      "src/index.ts",
+      [
+        'const text = `import x from "./fake"`;',
+        'const value = "require(\\"./fake\\")";',
+      ].join("\n"),
+    );
+
+    assert.equal(result.imports.length, 0);
+  });
+
+  it("extracts imports from TSX files", () => {
+    const result = extractImports(
+      "src/component.tsx",
+      [
+        'import React from "react";',
+        'import { Button } from "./button";',
+        "export default function Component() {",
+        "  return <Button />;",
+        "}",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(
+      result.imports.map((item) => item.specifier),
+      ["react", "./button"],
+    );
+  });
 });

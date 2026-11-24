@@ -69,7 +69,7 @@ describe("repository parser integration", () => {
       rootPath,
     });
 
-   assert.equal(result.schemaVersion, "1.3.0");
+    assert.equal(result.schemaVersion, "1.3.0");
 
     assert.equal(
       result.repository.name,
@@ -357,7 +357,7 @@ describe("repository parser integration", () => {
     await writeFile(
       path.join(rootPath, "src", "index.ts"),
       [
-        'import Button from "../../components/button";',
+        'import Button from "@/components/button";',
         "console.log(Button);",
       ].join("\n"),
       "utf8",
@@ -590,7 +590,7 @@ describe("repository parser integration", () => {
     await writeFile(
       path.join(rootPath, "src", "index.ts"),
       [
-        'import Button from "../../components/button";',
+        'import Button from "@/components/button";',
         "console.log(Button);",
       ].join("\n"),
       "utf8",

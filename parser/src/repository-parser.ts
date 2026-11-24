@@ -1,6 +1,7 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import {
   REPOSITORY_MAP_SCHEMA_VERSION,
@@ -111,32 +112,49 @@ async function readPackages(
   files: readonly FileNode[],
 ): Promise<PackageInfo[]> {
   const manifests = files.filter(
-    (file) => file.name === "package.json" && file.path.split("/").length <= 4,
+    (file) =>
+      file.name === "package.json" &&
+      file.path.split("/").length <= 4,
   );
 
-  const packages = await mapConcurrent(manifests, 8, async (file): Promise<PackageInfo | null> => {
-    try {
-      const json = JSON.parse(await readFile(path.join(rootPath, file.path), "utf8"));
+  const packages = await mapConcurrent(
+    manifests,
+    8,
+    async (file): Promise<PackageInfo | null> => {
+      try {
+        const json = JSON.parse(
+          await readFile(path.join(rootPath, file.path), "utf8"),
+        );
 
-      const names = new Set<string>();
+        const names = new Set<string>();
 
-      for (const field of ["dependencies", "devDependencies", "peerDependencies"]) {
-        const section = json?.[field];
-        if (section && typeof section === "object") {
-          for (const name of Object.keys(section)) names.add(name);
+        for (const field of [
+          "dependencies",
+          "devDependencies",
+          "peerDependencies",
+        ]) {
+          const section = json?.[field];
+
+          if (section && typeof section === "object") {
+            for (const name of Object.keys(section)) {
+              names.add(name);
+            }
+          }
         }
+
+        return {
+          directory: file.folderPath === "." ? "" : file.folderPath,
+          dependencies: names,
+        };
+      } catch {
+        return null;
       }
+    },
+  );
 
-      return {
-        directory: file.folderPath === "." ? "" : file.folderPath,
-        dependencies: names,
-      };
-    } catch {
-      return null;
-    }
-  });
-
-  return packages.filter((entry): entry is PackageInfo => entry !== null);
+  return packages.filter(
+    (entry): entry is PackageInfo => entry !== null,
+  );
 }
 
 function detectionContext(
@@ -149,21 +167,41 @@ function detectionContext(
   for (const pkg of packages) {
     for (const name of pkg.dependencies) {
       allDependencies.add(name);
-      if (pkg.directory === "") rootDependencies.add(name);
+
+      if (pkg.directory === "") {
+        rootDependencies.add(name);
+      }
     }
   }
 
-  return { files, packages, rootDependencies, allDependencies };
+  return {
+    files,
+    packages,
+    rootDependencies,
+    allDependencies,
+  };
 }
 
 export async function parseRepository(
   options: ParseRepositoryOptions,
 ): Promise<RepositoryMap> {
   const rootPath = path.resolve(options.rootPath);
+  const totalStartedAt = performance.now();
 
-  // Load root and nested TypeScript/JavaScript configurations.
+  // Stage 1: Load module resolution configurations.
+  const configStartedAt = performance.now();
+
   const moduleResolutionConfigs =
     loadModuleResolutionConfigs(rootPath);
+
+  console.error(
+    `[timing] module configs: ${(
+      performance.now() - configStartedAt
+    ).toFixed(2)}ms`,
+  );
+
+  // Stage 2: Walk the repository.
+  const walkStartedAt = performance.now();
 
   await options.onStage?.("select", "Selecting files to map");
 
@@ -173,15 +211,31 @@ export async function parseRepository(
     excludedFiles: options.excludedFiles,
   });
 
+  console.error(
+    `[timing] repository walk: ${(
+      performance.now() - walkStartedAt
+    ).toFixed(2)}ms`,
+  );
+
+  // Stage 3: Read package information and detect framework.
+  const packageStartedAt = performance.now();
+
   const packages = await readPackages(rootPath, walkResult.files);
   const detection = detectionContext(walkResult.files, packages);
   const adapter = detectFramework(detection);
+
+  console.error(
+    `[timing] packages + framework: ${(
+      performance.now() - packageStartedAt
+    ).toFixed(2)}ms`,
+  );
 
   await options.onStage?.(
     "parse",
     `Parsing imports in ${walkResult.statistics.filesParsed} files`,
   );
 
+  // Stage 4: Extract imports using source content collected by the walker.
   const occurrences: ImportOccurrence[] = [];
   const facts = new Map<string, FileFacts>();
   const commonJsExports = new Map<string, string[]>();
@@ -190,21 +244,66 @@ export async function parseRepository(
     PARSABLE_EXTENSIONS.has(file.extension.toLowerCase()),
   );
 
-  const extractions = await mapConcurrent(parsable, READ_CONCURRENCY, async (file) => {
-    const sourceCode = await readFile(path.join(rootPath, file.path), "utf8");
-    return extractImports(toPosix(file.path), sourceCode);
-  });
+  const extractionStartedAt = performance.now();
+
+  let sourceFileMs = 0;
+  let traversalMs = 0;
+
+  const extractions = await mapConcurrent(
+    parsable,
+    READ_CONCURRENCY,
+    async (file) => {
+      const sourceCode = walkResult.sourceContents.get(file.path);
+
+      if (sourceCode === undefined) {
+        throw new Error(
+          `Source content missing for parsable file: ${file.path}`,
+        );
+      }
+
+      return extractImports(
+        toPosix(file.path),
+        sourceCode,
+        (timing) => {
+          sourceFileMs += timing.sourceFileMs;
+          traversalMs += timing.traversalMs;
+        },
+      );
+    },
+  );
+
+  console.error(
+    `[timing] TypeScript source parsing: ${sourceFileMs.toFixed(2)}ms`,
+  );
+
+  console.error(
+    `[timing] AST traversal: ${traversalMs.toFixed(2)}ms`,
+  );
+
+  console.error(
+    `[timing] import extraction: ${(
+      performance.now() - extractionStartedAt
+    ).toFixed(2)}ms (${parsable.length} files)`,
+  );
 
   parsable.forEach((file, index) => {
     const extracted = extractions[index];
 
     occurrences.push(...extracted.imports);
-    facts.set(file.path, { directives: extracted.directives });
+    facts.set(file.path, {
+      directives: extracted.directives,
+    });
 
     if (extracted.commonJsExports.length > 0) {
-      commonJsExports.set(file.path, extracted.commonJsExports);
+      commonJsExports.set(
+        file.path,
+        extracted.commonJsExports,
+      );
     }
   });
+
+  // Release retained source text once extraction is complete.
+  walkResult.sourceContents.clear();
 
   occurrences.sort((a, b) => {
     return (
@@ -213,6 +312,9 @@ export async function parseRepository(
       a.column - b.column
     );
   });
+
+  // Stage 5: Resolve imports.
+  const resolutionStartedAt = performance.now();
 
   const resolverResult = resolveImports(
     occurrences,
@@ -225,17 +327,35 @@ export async function parseRepository(
     },
   );
 
-  const coverage = createCoverage(
-    resolverResult.entries,
+  console.error(
+    `[timing] import resolution: ${(
+      performance.now() - resolutionStartedAt
+    ).toFixed(2)}ms (${occurrences.length} imports)`,
   );
+
+  // Stage 6: Build dependency graph.
+  const graphStartedAt = performance.now();
+
+  const coverage = createCoverage(resolverResult.entries);
 
   const graph = buildDependencyGraph(
     walkResult.files,
     coverage,
   );
 
+  console.error(
+    `[timing] graph building: ${(
+      performance.now() - graphStartedAt
+    ).toFixed(2)}ms`,
+  );
+
+  // Stage 7: Classify files and extract routes.
+  const classificationStartedAt = performance.now();
+
   const classify = adapter.classifier(detection);
-  const noFacts: FileFacts = { directives: [] };
+  const noFacts: FileFacts = {
+    directives: [],
+  };
 
   const files: FileNode[] = graph.files.map((file) => {
     const exportedNames = commonJsExports.get(file.path);
@@ -247,7 +367,12 @@ export async function parseRepository(
     };
   });
 
-  const roles = new Map(files.map((file) => [file.path, file.role as string]));
+  const roles = new Map(
+    files.map((file) => [
+      file.path,
+      file.role as string,
+    ]),
+  );
 
   const routes: ExtractedRoute[] = adapter.extractRoutes
     ? await adapter.extractRoutes({
@@ -255,9 +380,16 @@ export async function parseRepository(
         files,
         rootPath,
         roles,
-        read: (filePath) => readFile(path.join(rootPath, filePath), "utf8"),
+        read: (filePath) =>
+          readFile(path.join(rootPath, filePath), "utf8"),
       })
     : [];
+
+  console.error(
+    `[timing] classification + routes: ${(
+      performance.now() - classificationStartedAt
+    ).toFixed(2)}ms`,
+  );
 
   const importsFound = occurrences.length;
 
@@ -278,6 +410,12 @@ export async function parseRepository(
     excludedImports: coverage.excluded,
     unresolvedImports: coverage.unresolved,
   };
+
+  console.error(
+    `[timing] total parseRepository: ${(
+      performance.now() - totalStartedAt
+    ).toFixed(2)}ms`,
+  );
 
   return {
     schemaVersion: REPOSITORY_MAP_SCHEMA_VERSION,

@@ -1,6 +1,7 @@
 
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
+import { performance } from "node:perf_hooks";
 import path from "node:path";
 
 import type {
@@ -36,6 +37,7 @@ export interface RepositoryWalkerResult {
   skippedFiles: SkippedFile[];
   excludedDirectories: ExcludedDirectory[];
   scanIssues: DirectoryScanIssue[];
+  sourceContents: Map<string, string>;
   statistics: {
     filesFound: number;
     filesParsed: number;
@@ -51,11 +53,29 @@ export class RepositoryWalkError extends Error {
   }
 }
 
+interface WalkerTimings {
+  directoryReadMs: number;
+  metadataMs: number;
+  fileReadMs: number;
+  processingMs: number;
+  directoriesRead: number;
+  filesInspected: number;
+}
+
 const DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DEFAULT_EXCLUDED_DIRECTORIES = [
-  ".git", "node_modules", ".next", ".turbo", ".vercel",
-  ".cache", ".temp", "coverage", "dist", "build", "out",
+  ".git",
+  "node_modules",
+  ".next",
+  ".turbo",
+  ".vercel",
+  ".cache",
+  ".temp",
+  "coverage",
+  "dist",
+  "build",
+  "out",
 ];
 
 const DEFAULT_EXCLUDED_FILES = ["tsconfig.tsbuildinfo"];
@@ -65,6 +85,10 @@ const SUPPORTED_EXTENSIONS = new Set([
   ".json", ".css", ".scss", ".sass", ".less", ".html", ".htm",
   ".md", ".mdx", ".txt", ".py", ".sql", ".prisma", ".graphql",
   ".gql", ".sh", ".yaml", ".yml", ".toml", ".xml", ".svg",
+]);
+
+const SOURCE_EXTENSIONS = new Set([
+  ".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs",
 ]);
 
 const SUPPORTED_SPECIAL_FILES = new Set([
@@ -210,17 +234,28 @@ async function walkDirectory(
   skippedFiles: SkippedFile[],
   excludedDirectoryEntries: ExcludedDirectory[],
   scanIssues: DirectoryScanIssue[],
+  sourceContents: Map<string, string>,
+  timings: WalkerTimings,
 ): Promise<void> {
   let entries;
 
+  const directoryStart = performance.now();
+
   try {
     entries = await readdir(directoryPath, { withFileTypes: true });
+    timings.directoryReadMs += performance.now() - directoryStart;
+    timings.directoriesRead++;
   } catch (error) {
+    timings.directoryReadMs += performance.now() - directoryStart;
+
     scanIssues.push({
       path: toPosixPath(path.relative(rootPath, directoryPath)) || ".",
       reason: "unreadable_directory",
-      message: error instanceof Error ? error.message : "Unable to read directory.",
+      message: error instanceof Error
+        ? error.message
+        : "Unable to read directory.",
     });
+
     return;
   }
 
@@ -260,13 +295,17 @@ async function walkDirectory(
         skippedFiles,
         excludedDirectoryEntries,
         scanIssues,
+        sourceContents,
+        timings,
       );
+
       continue;
     }
 
     if (!entry.isFile()) continue;
 
     const extension = path.extname(entry.name).toLowerCase();
+
     const skipReason = getSkipReason(
       entry.name,
       extension,
@@ -282,20 +321,27 @@ async function walkDirectory(
           ? "File excluded by parser configuration."
           : `Unsupported file extension: ${extension || "(none)"}.`,
       );
+
       continue;
     }
 
     let fileStats;
 
+    const metadataStart = performance.now();
+
     try {
       fileStats = await stat(absolutePath);
+      timings.metadataMs += performance.now() - metadataStart;
     } catch (error) {
+      timings.metadataMs += performance.now() - metadataStart;
+
       addSkippedFile(
         skippedFiles,
         relativePath,
         "unreadable",
         error instanceof Error ? error.message : "Unable to access file.",
       );
+
       continue;
     }
 
@@ -306,40 +352,56 @@ async function walkDirectory(
         "file_too_large",
         `File exceeds the ${maxFileSizeBytes}-byte size limit.`,
       );
+
       continue;
     }
 
     let buffer: Buffer;
 
+    const readStart = performance.now();
+
     try {
       buffer = await readFile(absolutePath);
+      timings.fileReadMs += performance.now() - readStart;
+      timings.filesInspected++;
     } catch (error) {
+      timings.fileReadMs += performance.now() - readStart;
+
       addSkippedFile(
         skippedFiles,
         relativePath,
         "unreadable",
         error instanceof Error ? error.message : "Unable to read file.",
       );
+
       continue;
     }
 
+    const processingStart = performance.now();
+
     if (buffer.length === 0) {
+      timings.processingMs += performance.now() - processingStart;
+
       addSkippedFile(
         skippedFiles,
         relativePath,
         "empty_file",
         "File is empty.",
       );
+
       continue;
     }
 
     if (buffer.includes(0)) {
+      timings.processingMs += performance.now() - processingStart;
+
       addSkippedFile(
         skippedFiles,
         relativePath,
         "binary_file",
         "File contains null bytes and appears to be binary.",
       );
+
       continue;
     }
 
@@ -348,13 +410,20 @@ async function walkDirectory(
     try {
       content = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
     } catch {
+      timings.processingMs += performance.now() - processingStart;
+
       addSkippedFile(
         skippedFiles,
         relativePath,
         "invalid_encoding",
         "File is not valid UTF-8.",
       );
+
       continue;
+    }
+
+    if (SOURCE_EXTENSIONS.has(extension)) {
+      sourceContents.set(relativePath, content);
     }
 
     const folderPath = toPosixPath(path.dirname(relativePath));
@@ -373,6 +442,8 @@ async function walkDirectory(
       fanIn: 0,
       fanOut: 0,
     });
+
+    timings.processingMs += performance.now() - processingStart;
   }
 }
 
@@ -436,6 +507,7 @@ export async function walkRepository(
   options: RepositoryWalkerOptions,
 ): Promise<RepositoryWalkerResult> {
   const rootPath = path.resolve(options.rootPath);
+
   const maxFileSizeBytes =
     options.maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE;
 
@@ -478,6 +550,18 @@ export async function walkRepository(
   const skippedFiles: SkippedFile[] = [];
   const excludedDirectoryEntries: ExcludedDirectory[] = [];
   const scanIssues: DirectoryScanIssue[] = [];
+  const sourceContents = new Map<string, string>();
+
+  const timings: WalkerTimings = {
+    directoryReadMs: 0,
+    metadataMs: 0,
+    fileReadMs: 0,
+    processingMs: 0,
+    directoriesRead: 0,
+    filesInspected: 0,
+  };
+
+  const walkerStart = performance.now();
 
   await walkDirectory(
     rootPath,
@@ -489,6 +573,8 @@ export async function walkRepository(
     skippedFiles,
     excludedDirectoryEntries,
     scanIssues,
+    sourceContents,
+    timings,
   );
 
   files.sort((a, b) => a.path.localeCompare(b.path));
@@ -497,12 +583,33 @@ export async function walkRepository(
   const folders = buildFolders(files, rootName);
   const filesFound = files.length + skippedFiles.length;
 
+  console.error(
+    `[walker timing] total: ${(performance.now() - walkerStart).toFixed(2)}ms`,
+  );
+
+  console.error(
+    `[walker timing] directory reads: ${timings.directoryReadMs.toFixed(2)}ms (${timings.directoriesRead} directories)`,
+  );
+
+  console.error(
+    `[walker timing] metadata: ${timings.metadataMs.toFixed(2)}ms`,
+  );
+
+  console.error(
+    `[walker timing] file reads: ${timings.fileReadMs.toFixed(2)}ms (${timings.filesInspected} files)`,
+  );
+
+  console.error(
+    `[walker timing] processing: ${timings.processingMs.toFixed(2)}ms`,
+  );
+
   return {
     files,
     folders,
     skippedFiles,
     excludedDirectories: excludedDirectoryEntries,
     scanIssues,
+    sourceContents,
     statistics: {
       filesFound,
       filesParsed: files.length,

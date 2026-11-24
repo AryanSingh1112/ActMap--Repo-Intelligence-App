@@ -13,7 +13,7 @@ export function AppHeader() {
           href="/workspace"
           className="font-mono text-lg font-semibold tracking-tight text-foreground"
         >
-          actmap
+          Actmap
         </Link>
 
         <span className="text-subtle">/</span>

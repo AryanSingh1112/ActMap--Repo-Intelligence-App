@@ -262,8 +262,7 @@ describe("require() extraction", () => {
 describe("taxonomy", () => {
   it("is plain data that a browser can import", async () => {
     const { readFile } = await import("node:fs/promises");
-    const source = await readFile(new URL("../src/taxonomy/categories.ts", import.meta.url), "utf8");
-
+const source = await readFile(new URL("../taxonomy/categories.ts", import.meta.url), "utf8");
     assert.equal(/^\s*import\s/m.test(source), false);
     assert.deepEqual(taxonomyFor("nextjs").categories.slice(0, 3), ["Page routes", "API endpoints", "Server actions"]);
     assert.deepEqual(taxonomyFor("nestjs").categories.filter((name) => ["Controllers", "Services", "Modules", "Entities"].includes(name)), ["Controllers", "Services", "Modules", "Entities"]);
