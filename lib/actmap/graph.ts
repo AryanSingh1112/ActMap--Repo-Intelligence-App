@@ -12,31 +12,18 @@ type GraphWalkOptions = {
   maxDepth?: number;
 };
 
-export function walkGraph({
-  filePath,
-  edges,
-  direction,
+/**
+ * Breadth-first walk over a prebuilt adjacency map (path -> neighbours, in
+ * edge order). The cost is the size of what is reached, not the size of the
+ * graph, so callers that keep the map (the agent's graph index) pay no
+ * per-query setup.
+ */
+export function walkAdjacency(
+  filePath: string,
+  adjacency: ReadonlyMap<string, Iterable<string>>,
   maxDepth = 2,
-}: GraphWalkOptions): WalkResult[] {
+): WalkResult[] {
   if (maxDepth < 1) return [];
-
-  const adjacency = new Map<string, Set<string>>();
-
-  function addConnection(from: string, to: string) {
-    if (!adjacency.has(from)) {
-      adjacency.set(from, new Set());
-    }
-
-    adjacency.get(from)!.add(to);
-  }
-
-  for (const edge of edges) {
-    if (direction === "outgoing") {
-      addConnection(edge.sourceFile, edge.targetFile);
-    } else {
-      addConnection(edge.targetFile, edge.sourceFile);
-    }
-  }
 
   const visited = new Set<string>([filePath]);
   const queue: WalkResult[] = [{ path: filePath, depth: 0 }];
@@ -69,6 +56,35 @@ export function walkGraph({
   }
 
   return results;
+}
+
+export function walkGraph({
+  filePath,
+  edges,
+  direction,
+  maxDepth = 2,
+}: GraphWalkOptions): WalkResult[] {
+  if (maxDepth < 1) return [];
+
+  const adjacency = new Map<string, Set<string>>();
+
+  function addConnection(from: string, to: string) {
+    if (!adjacency.has(from)) {
+      adjacency.set(from, new Set());
+    }
+
+    adjacency.get(from)!.add(to);
+  }
+
+  for (const edge of edges) {
+    if (direction === "outgoing") {
+      addConnection(edge.sourceFile, edge.targetFile);
+    } else {
+      addConnection(edge.targetFile, edge.sourceFile);
+    }
+  }
+
+  return walkAdjacency(filePath, adjacency, maxDepth);
 }
 
 export function getBlastRadius(

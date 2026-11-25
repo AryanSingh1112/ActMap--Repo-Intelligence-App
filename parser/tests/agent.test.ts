@@ -152,3 +152,34 @@ test("behaviour scorers catch the failures they exist for", () => {
   assert.equal(declinedBriefly({ text: "I can't judge code quality. I can tell you what depends on a file.", toolCalls: [] }), 1);
   assert.equal(declinedBriefly({ text: "Sure! Here it is.", toolCalls: [] }), 0);
 });
+
+import { walkAdjacency, walkGraph } from "../../lib/actmap/graph";
+
+test("walking the prebuilt index returns exactly what walking the edge list returns", () => {
+  // A deterministic random graph with cycles, hubs, self-loops and duplicate edges.
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  const names = Array.from({ length: 120 }, (_, i) => `f${i}.ts`);
+  const edges = Array.from({ length: 500 }, () => {
+    const hub = rnd() < 0.3 ? Math.floor(rnd() * 5) : Math.floor(rnd() * 120);
+    return { sourceFile: names[Math.floor(rnd() * 120)], targetFile: names[hub], occurrenceCount: 1, kinds: ["static"] };
+  });
+
+  const outgoing = new Map<string, string[]>();
+  const incoming = new Map<string, string[]>();
+  for (const name of names) {
+    outgoing.set(name, []);
+    incoming.set(name, []);
+  }
+  for (const e of edges) {
+    outgoing.get(e.sourceFile)!.push(e.targetFile);
+    incoming.get(e.targetFile)!.push(e.sourceFile);
+  }
+
+  for (const name of names) {
+    for (let depth = 1; depth <= 5; depth++) {
+      assert.deepEqual(walkAdjacency(name, outgoing, depth), walkGraph({ filePath: name, edges, direction: "outgoing", maxDepth: depth }), `${name} out ${depth}`);
+      assert.deepEqual(walkAdjacency(name, incoming, depth), walkGraph({ filePath: name, edges, direction: "incoming", maxDepth: depth }), `${name} in ${depth}`);
+    }
+  }
+});
