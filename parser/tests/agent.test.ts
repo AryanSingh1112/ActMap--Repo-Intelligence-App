@@ -183,3 +183,41 @@ test("walking the prebuilt index returns exactly what walking the edge list retu
     }
   }
 });
+
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { parseRepository } from "../src/repository-parser";
+
+test("the extraction cache never changes a result, including after an edit", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "actmap-cache-"));
+  const origError = console.error;
+  console.error = () => {};
+  try {
+    await mkdir(path.join(root, "src"), { recursive: true });
+    await writeFile(path.join(root, "src/a.ts"), 'import { b } from "./b.js";\nexport const a = b;\n');
+    await writeFile(path.join(root, "src/b.ts"), "export const b = 1;\n");
+    await writeFile(path.join(root, "src/c.ts"), "export const c = 2;\n");
+
+    const shape = (m: Awaited<ReturnType<typeof parseRepository>>) => JSON.stringify({ s: m.statistics, e: m.edges });
+    const cache = new Map();
+
+    const fresh = await parseRepository({ rootPath: root });
+    const first = await parseRepository({ rootPath: root, extractionCache: cache });
+    const second = await parseRepository({ rootPath: root, extractionCache: cache });
+    assert.equal(shape(first), shape(fresh));
+    assert.equal(shape(second), shape(fresh));
+    assert.equal(fresh.statistics.edgesCreated, 1);
+
+    // Edit one file: the cached run must see the new import and still match a fresh parse.
+    await writeFile(path.join(root, "src/c.ts"), 'import { a } from "./a.js";\nexport const c = a;\n');
+    const cached = await parseRepository({ rootPath: root, extractionCache: cache });
+    const scratch = await parseRepository({ rootPath: root });
+    assert.equal(shape(cached), shape(scratch));
+    assert.equal(cached.statistics.edgesCreated, 2);
+  } finally {
+    console.error = origError;
+    await rm(root, { recursive: true, force: true });
+  }
+});

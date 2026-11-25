@@ -18,7 +18,7 @@ import type {
 } from "./types";
 
 import { walkRepository } from "./walker/repository-walker";
-import { extractImports } from "./imports/import-extractor";
+import { extractImports, type ImportExtractorResult } from "./imports/import-extractor";
 import { resolveImports } from "./resolution/import-resolver";
 import { loadModuleResolutionConfigs } from "./resolution/module-resolution-config";
 import { buildDependencyGraph } from "./graph/graph-builder";
@@ -55,6 +55,13 @@ export interface ParseRepositoryOptions {
    * It never changes what is parsed or what is returned.
    */
   onStage?: (stage: ParseStage, message: string) => void | Promise<void>;
+  /**
+   * Optional cache of per-file import extraction, keyed by path and content
+   * hash. Pass the same Map to a later run and files whose content has not
+   * changed skip parsing entirely. Extraction depends only on a file's path and
+   * text, so a hit is exactly what a fresh parse would return.
+   */
+  extractionCache?: Map<string, ImportExtractorResult>;
 }
 
 function toPosix(filePath: string): string {
@@ -261,7 +268,14 @@ export async function parseRepository(
         );
       }
 
-      return extractImports(
+      const cacheKey = `${file.contentHash}\0${file.path}`;
+      const cached = options.extractionCache?.get(cacheKey);
+
+      if (cached) {
+        return cached;
+      }
+
+      const extracted = extractImports(
         toPosix(file.path),
         sourceCode,
         (timing) => {
@@ -269,6 +283,10 @@ export async function parseRepository(
           traversalMs += timing.traversalMs;
         },
       );
+
+      options.extractionCache?.set(cacheKey, extracted);
+
+      return extracted;
     },
   );
 
