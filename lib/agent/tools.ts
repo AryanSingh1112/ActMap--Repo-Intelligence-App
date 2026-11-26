@@ -1,7 +1,7 @@
 
 import { frameworkLabel } from "../../parser/taxonomy/categories";
 import { getEntrypointPaths } from "../actmap/entrypoints";
-import { getBlastRadius, getDependencyChain } from "../actmap/graph";
+import { walkAdjacency } from "../actmap/graph";
 import { buildModel, categoryOf } from "../actmap/model";
 
 import type { RepositoryData } from "../../types/actmap";
@@ -252,10 +252,12 @@ export function runTool(
         Math.max(1, Math.floor(Number(input.max_depth) || 2)),
       );
 
-      const results =
-        direction === "incoming"
-          ? getBlastRadius(path, model.edges, depth)
-          : getDependencyChain(path, model.edges, depth);
+      // Walk the index built once with the model; nothing is rebuilt per query.
+      const results = walkAdjacency(
+        path,
+        direction === "incoming" ? model.importedBy : model.imports,
+        depth,
+      );
 
       const byDepth: Record<string, number> = {};
 

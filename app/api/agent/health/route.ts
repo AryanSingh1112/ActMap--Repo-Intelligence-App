@@ -1,28 +1,33 @@
+import { auth } from "@clerk/nextjs/server";
 
-import { NextResponse } from "next/server";
-
-import { getAgent } from "../../../../agent/src/agent";
-
-export const maxDuration = 120;
+import { missingModelSettings } from "../../../../agent/src/settings";
+import { agentUrl } from "../../../../lib/agent/stream";
 
 export async function GET() {
-  try {
-    await getAgent();
+  const { userId } = await auth();
 
-    return NextResponse.json({
-      status: "ok",
-      agent: "ready",
-      runtime: "in-process",
-    });
-  } catch (error) {
-    console.error("[agent-health] Agent initialization failed:", error);
-
-    return NextResponse.json(
-      {
-        status: "error",
-        agent: "unavailable",
-      },
-      { status: 503 },
-    );
+  if (!userId) {
+    return Response.json({ up: false }, { status: 401 });
   }
+
+  // A LangGraph server is configured: check that it answers.
+  if (process.env.AGENT_URL?.trim()) {
+    try {
+      const response = await fetch(`${agentUrl()}/ok`, {
+        signal: AbortSignal.timeout(1500),
+        cache: "no-store",
+      });
+
+      return Response.json({ up: response.ok, mode: "server" });
+    } catch {
+      return Response.json({ up: false, mode: "server" });
+    }
+  }
+
+  // In-process (production): up when the settings it needs are present.
+  const configured =
+    missingModelSettings().length === 0 &&
+    Boolean(process.env.AGENT_TOOL_SECRET?.trim());
+
+  return Response.json({ up: configured, mode: "in-process" });
 }

@@ -89,6 +89,52 @@ function createCoverage(
 }
 
 describe("import resolver", () => {
+  it("resolves a TypeScript ESM import that names the emitted .js extension", () => {
+    const cases: [string, string, string[]][] = [
+      ["./observable.js", "src/observable.ts", ["src/index.ts", "src/observable.ts"]],
+      ["./view.js", "src/view.tsx", ["src/index.ts", "src/view.tsx"]],
+      ["./worker.mjs", "src/worker.mts", ["src/index.ts", "src/worker.mts"]],
+      ["./types.js", "src/types.d.ts", ["src/index.ts", "src/types.d.ts"]],
+    ];
+
+    for (const [specifier, expected, knownFiles] of cases) {
+      const result = resolveImports([createOccurrence("src/index.ts", specifier)], {
+        rootPath: "/project",
+        knownFiles,
+        skippedFiles: [],
+        excludedDirectories: [],
+      });
+
+      assert.equal(result.entries[0].status, "resolved", specifier);
+      assert.equal(result.entries[0].resolvedPath, expected, specifier);
+    }
+  });
+
+  it("resolves a require of the repository root from a nested folder", () => {
+    for (const specifier of ["../..", "../../"]) {
+      const result = resolveImports([createOccurrence("examples/auth/index.js", specifier, "require")], {
+        rootPath: "/project",
+        knownFiles: ["index.js", "examples/auth/index.js"],
+        skippedFiles: [],
+        excludedDirectories: [],
+      });
+
+      assert.equal(result.entries[0].status, "resolved", specifier);
+      assert.equal(result.entries[0].resolvedPath, "index.js", specifier);
+    }
+  });
+
+  it("still reports a .js import as missing when no source file exists", () => {
+    const result = resolveImports([createOccurrence("src/index.ts", "./gone.js")], {
+      rootPath: "/project",
+      knownFiles: ["src/index.ts"],
+      skippedFiles: [],
+      excludedDirectories: [],
+    });
+
+    assert.equal(result.entries[0].status, "unresolved");
+  });
+
   it("resolves an exact relative import", () => {
     const occurrence = createOccurrence(
       "src/index.ts",

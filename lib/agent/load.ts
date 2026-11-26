@@ -33,26 +33,18 @@ export async function loadForCredential(credential: Credential): Promise<Reposit
   const { repo } = splitRepositoryName(project?.repository_url ?? "", project?.name ?? "unknown");
   const stats = (row.stats ?? {}) as { adapter?: string; detection?: { confidence: string; evidence: string[] } };
 
- const data = await loadRepositoryData(supabase, {
-  analysisId: row.id,
-  name: repo,
-  commitSha: row.commit_sha,
-  adapter: stats.adapter ?? "generic",
-  coverage: row.coverage,
-  detection: stats.detection ?? null,
-});
+  const data = await loadRepositoryData(supabase, {
+    analysisId: row.id,
+    name: repo,
+    commitSha: row.commit_sha,
+    adapter: stats.adapter ?? "generic",
+    coverage: row.coverage,
+    detection: stats.detection ?? null,
+  });
 
-console.log("[agent repository load]", {
-  analysisId: row.id,
-  files: data.files.length,
-  edges: data.edges.length,
-  routes: data.routes.length,
-  matchingPaths: data.files
-    .filter((file) => /button|middleware|auth/i.test(file.path))
-    .map((file) => file.path),
-});
+
   cache.set(key, { at: Date.now(), data });
   if (cache.size > 20) cache.delete(cache.keys().next().value as string);
-  
+
   return data;
 }

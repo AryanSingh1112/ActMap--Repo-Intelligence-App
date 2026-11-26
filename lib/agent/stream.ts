@@ -1,77 +1,19 @@
 
 import "server-only";
 
-import { getAgent } from "../../agent/src/agent";
+import { Client } from "@langchain/langgraph-sdk";
 
-export type AskEvent =
-  | { type: "thread"; threadId: string }
-  | { type: "text"; text: string }
-  | { type: "tool"; id: string; name: string; args: Record<string, unknown> }
-  | {
-      type: "tool_result";
-      id: string;
-      name: string;
-      ok: boolean;
-      summary: string;
-    }
-  | { type: "done" }
-  | { type: "error"; message: string };
+import { EventTranslator, type AskEvent } from "./events";
 
-type Message = {
-  type?: string;
-  content?: unknown;
-  tool_calls?: {
-    id?: string;
-    name: string;
-    args?: Record<string, unknown>;
-  }[];
-  tool_call_id?: string;
-  name?: string;
-};
-
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .map((part) =>
-      typeof part === "string"
-        ? part
-        : (part as { text?: string })?.text ?? "",
-    )
-    .join("");
+export function agentUrl(): string {
+  return (process.env.AGENT_URL ?? "http://localhost:2024").replace(/\/$/, "");
 }
 
-function summarise(content: string) {
-  if (/^The lookup failed/i.test(content)) {
-    return { ok: false, summary: content.slice(0, 160) };
-  }
-
-  try {
-    const body = JSON.parse(content) as Record<string, unknown>;
-
-    for (const key of [
-      "files",
-      "matches",
-      "routes",
-      "results",
-      "imports",
-      "importedBy",
-    ]) {
-      if (Array.isArray(body[key])) {
-        return { ok: true, summary: `${body[key].length} ${key}` };
-      }
-    }
-  } catch {
-    // Tool output was not JSON.
-  }
-
-  return {
-    ok: true,
-    summary: content.replace(/\s+/g, " ").slice(0, 120),
-  };
+export function agentClient(): Client {
+  return new Client({ apiUrl: agentUrl() });
 }
 
+export type { AskEvent } from "./events";
 
 export async function* relayRun(
   threadId: string,
@@ -79,64 +21,28 @@ export async function* relayRun(
   credential: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AskEvent> {
-  const agent = await getAgent();
-
-  const result = (await agent.invoke(
-    {
+  const stream = agentClient().runs.stream(threadId, "agent", {
+    input: {
       messages: [{ role: "user", content: message }],
-    } as never,
-    {
+    },
+    config: {
       configurable: {
-        thread_id: threadId,
         actmapCredential: credential,
       },
-      signal,
-    } as never,
-  )) as { messages?: Message[] };
+    },
+    streamMode: ["messages-tuple", "updates"],
+    signal,
+  });
 
-  const messages = result.messages ?? [];
-  const seen = new Set<string>();
+  const translator = new EventTranslator();
 
-  for (const item of messages) {
-    if (item.type === "ai") {
-      for (const call of item.tool_calls ?? []) {
-        const id = call.id ?? `${call.name}-${seen.size}`;
-
-        if (seen.has(id)) continue;
-        seen.add(id);
-
-        yield {
-          type: "tool",
-          id,
-          name: call.name,
-          args: call.args ?? {},
-        };
-      }
+  for await (const event of stream) {
+    if (event.event === "messages" || event.event === "updates") {
+      for (const out of translator.push(event.event, event.data)) yield out;
+    } else if (event.event === "error") {
+      yield { type: "error", message: "The agent stopped unexpectedly." };
     }
-
-    if (item.type === "tool") {
-      const { ok, summary } = summarise(textOf(item.content));
-
-      yield {
-        type: "tool_result",
-        id: item.tool_call_id ?? "",
-        name: item.name ?? "",
-        ok,
-        summary,
-      };
-    }
-  }
-
-  const finalMessage = [...messages]
-    .reverse()
-    .find((item) => item.type === "ai" && textOf(item.content).trim());
-
-  const answer = finalMessage ? textOf(finalMessage.content) : "";
-
-  if (answer) {
-    yield { type: "text", text: answer };
   }
 
   yield { type: "done" };
 }
-

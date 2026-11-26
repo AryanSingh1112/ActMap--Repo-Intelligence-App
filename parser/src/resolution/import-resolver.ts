@@ -40,6 +40,27 @@ const RESOLUTION_EXTENSIONS = [
   ".cts", ".mjs", ".cjs", ".json",
 ];
 
+/**
+ * TypeScript's ESM convention writes the emitted extension in the source:
+ * `import "./observable.js"` names `observable.ts`. Without this, every such
+ * import in a modern TypeScript codebase is reported as a missing file.
+ */
+const EMITTED_TO_SOURCE: Record<string, string[]> = {
+  ".js": [".ts", ".tsx", ".d.ts"],
+  ".jsx": [".tsx"],
+  ".mjs": [".mts", ".d.mts"],
+  ".cjs": [".cts", ".d.cts"],
+};
+
+function emittedExtensionCandidates(basePath: string): string[] {
+  const extension = path.posix.extname(basePath);
+  const sources = EMITTED_TO_SOURCE[extension];
+  if (!sources) return [];
+
+  const stem = basePath.slice(0, -extension.length);
+  return sources.map((source) => `${stem}${source}`);
+}
+
 function toPosix(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
@@ -345,13 +366,18 @@ function resolveRelativeImport(
     path.posix.join(sourceDirectory, specifier),
   );
 
-  const extensionCandidates = RESOLUTION_EXTENSIONS.map(
-    (extension) => `${basePath}${extension}`,
-  );
+  const extensionCandidates = [
+    ...RESOLUTION_EXTENSIONS.map((extension) => `${basePath}${extension}`),
+    ...emittedExtensionCandidates(basePath),
+  ];
 
-  const indexCandidates = RESOLUTION_EXTENSIONS.map(
-    (extension) => `${basePath.replace(/\/+$/, "")}/index${extension}`,
-  );
+  const indexCandidates = RESOLUTION_EXTENSIONS.map((extension) => {
+    const directory = basePath.replace(/\/+$/, "");
+    // `require("../..")` from a nested folder lands on the repository root.
+    return directory === "" || directory === "."
+      ? `index${extension}`
+      : `${directory}/index${extension}`;
+  });
 
   const candidates = [basePath, ...extensionCandidates, ...indexCandidates];
 
