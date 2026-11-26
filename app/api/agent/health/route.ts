@@ -1,14 +1,28 @@
-import { auth } from "@clerk/nextjs/server";
 
-import { agentUrl } from "../../../../lib/agent/stream";
+import { NextResponse } from "next/server";
+
+import { getAgent } from "../../../../agent/src/agent";
+
+export const maxDuration = 120;
 
 export async function GET() {
-  const { userId } = await auth();
-  if (!userId) return Response.json({ up: false }, { status: 401 });
   try {
-    const response = await fetch(`${agentUrl()}/ok`, { signal: AbortSignal.timeout(1500), cache: "no-store" });
-    return Response.json({ up: response.ok });
-  } catch {
-    return Response.json({ up: false });
+    await getAgent();
+
+    return NextResponse.json({
+      status: "ok",
+      agent: "ready",
+      runtime: "in-process",
+    });
+  } catch (error) {
+    console.error("[agent-health] Agent initialization failed:", error);
+
+    return NextResponse.json(
+      {
+        status: "error",
+        agent: "unavailable",
+      },
+      { status: 503 },
+    );
   }
 }

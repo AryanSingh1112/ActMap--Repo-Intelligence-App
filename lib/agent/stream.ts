@@ -1,25 +1,12 @@
 
 import "server-only";
 
-import { Client } from "@langchain/langgraph-sdk";
-
-export function agentUrl(): string {
-  return (process.env.AGENT_URL ?? "http://localhost:2024").replace(/\/$/, "");
-}
-
-export function agentClient(): Client {
-  return new Client({ apiUrl: agentUrl() });
-}
+import { getAgent } from "../../agent/src/agent";
 
 export type AskEvent =
   | { type: "thread"; threadId: string }
   | { type: "text"; text: string }
-  | {
-      type: "tool";
-      id: string;
-      name: string;
-      args: Record<string, unknown>;
-    }
+  | { type: "tool"; id: string; name: string; args: Record<string, unknown> }
   | {
       type: "tool_result";
       id: string;
@@ -30,7 +17,7 @@ export type AskEvent =
   | { type: "done" }
   | { type: "error"; message: string };
 
-type Raw = {
+type Message = {
   type?: string;
   content?: unknown;
   tool_calls?: {
@@ -44,7 +31,6 @@ type Raw = {
 
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
-
   if (!Array.isArray(content)) return "";
 
   return content
@@ -56,10 +42,7 @@ function textOf(content: unknown): string {
     .join("");
 }
 
-function summarise(content: string): {
-  ok: boolean;
-  summary: string;
-} {
+function summarise(content: string) {
   if (/^The lookup failed/i.test(content)) {
     return { ok: false, summary: content.slice(0, 160) };
   }
@@ -76,10 +59,7 @@ function summarise(content: string): {
       "importedBy",
     ]) {
       if (Array.isArray(body[key])) {
-        return {
-          ok: true,
-          summary: `${(body[key] as unknown[]).length} ${key}`,
-        };
+        return { ok: true, summary: `${body[key].length} ${key}` };
       }
     }
   } catch {
@@ -92,87 +72,71 @@ function summarise(content: string): {
   };
 }
 
+
 export async function* relayRun(
   threadId: string,
   message: string,
   credential: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AskEvent> {
-  const stream = agentClient().runs.stream(threadId, "agent", {
-    input: {
+  const agent = await getAgent();
+
+  const result = (await agent.invoke(
+    {
       messages: [{ role: "user", content: message }],
-    },
-    config: {
+    } as never,
+    {
       configurable: {
+        thread_id: threadId,
         actmapCredential: credential,
       },
-    },
-    streamMode: ["messages-tuple", "updates"],
-    signal,
-  });
+      signal,
+    } as never,
+  )) as { messages?: Message[] };
 
+  const messages = result.messages ?? [];
   const seen = new Set<string>();
 
-  for await (const event of stream) {
-    if (event.event === "messages") {
-      const [messageChunk] = event.data as unknown as [Raw, unknown];
-      const kind = messageChunk?.type ?? "";
+  for (const item of messages) {
+    if (item.type === "ai") {
+      for (const call of item.tool_calls ?? []) {
+        const id = call.id ?? `${call.name}-${seen.size}`;
 
-      if (
-        (kind === "ai" || kind === "AIMessageChunk") &&
-        !messageChunk.tool_calls?.length
-      ) {
-        const text = textOf(messageChunk.content);
+        if (seen.has(id)) continue;
+        seen.add(id);
 
-        if (text) {
-          yield { type: "text", text };
-        }
+        yield {
+          type: "tool",
+          id,
+          name: call.name,
+          args: call.args ?? {},
+        };
       }
-    } else if (event.event === "updates") {
-      const data = event.data as Record<
-        string,
-        { messages?: Raw[] } | undefined
-      >;
+    }
 
-      for (const node of Object.values(data)) {
-        for (const message of node?.messages ?? []) {
-          if (message.type === "ai") {
-            for (const call of message.tool_calls ?? []) {
-              const id = call.id ?? `${call.name}-${seen.size}`;
+    if (item.type === "tool") {
+      const { ok, summary } = summarise(textOf(item.content));
 
-              if (seen.has(id)) continue;
-
-              seen.add(id);
-
-              yield {
-                type: "tool",
-                id,
-                name: call.name,
-                args: call.args ?? {},
-              };
-            }
-          } else if (message.type === "tool") {
-            const { ok, summary } = summarise(
-              textOf(message.content),
-            );
-
-            yield {
-              type: "tool_result",
-              id: message.tool_call_id ?? "",
-              name: message.name ?? "",
-              ok,
-              summary,
-            };
-          }
-        }
-      }
-    } else if (event.event === "error") {
       yield {
-        type: "error",
-        message: "The agent stopped unexpectedly.",
+        type: "tool_result",
+        id: item.tool_call_id ?? "",
+        name: item.name ?? "",
+        ok,
+        summary,
       };
     }
   }
 
+  const finalMessage = [...messages]
+    .reverse()
+    .find((item) => item.type === "ai" && textOf(item.content).trim());
+
+  const answer = finalMessage ? textOf(finalMessage.content) : "";
+
+  if (answer) {
+    yield { type: "text", text: answer };
+  }
+
   yield { type: "done" };
 }
+

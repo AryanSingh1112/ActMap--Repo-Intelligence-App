@@ -1,5 +1,6 @@
 
 import { ChatGoogle } from "@langchain/google/node";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import { createDeepAgent } from "deepagents";
 import { modelFallbackMiddleware } from "langchain";
 
@@ -8,55 +9,61 @@ import { TOOLS } from "./tools";
 
 const MOVING = /(^|[-_:/])(latest|auto|default)$/i;
 
-function pinned(model: string | undefined, name: string): string {
-  const value = model?.trim();
+function required(name: string): string {
+  const value = process.env[name]?.trim();
 
   if (!value) {
-    throw new Error(`${name} is not set.`);
-  }
-
-  if (MOVING.test(value)) {
-    throw new Error(
-      `${name} is "${value}", a moving alias. Use an exact model name.`,
-    );
+    throw new Error(`Set ${name}.`);
   }
 
   return value;
 }
 
-const apiKey =
-  process.env.GEMINI_API_KEY ||
-  process.env.GOOGLE_API_KEY;
+function pinned(model: string, name: string): string {
+  if (MOVING.test(model)) {
+    throw new Error(`${name} must use a pinned model name.`);
+  }
+
+  return model;
+}
+
+const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
 if (!apiKey) {
-  throw new Error("Set GEMINI_API_KEY in agent/.env.");
+  throw new Error("Set GEMINI_API_KEY or GOOGLE_API_KEY.");
 }
 
 function chat(model: string) {
-  return new ChatGoogle({
-    model,
-    apiKey,
-    maxRetries: 0,
-  });
+  return new ChatGoogle({ model, apiKey, maxRetries: 0 });
 }
 
-const primary = pinned(
-  process.env.ACTMAP_AI_MODEL,
-  "ACTMAP_AI_MODEL",
-);
-
+const primary = pinned(required("ACTMAP_AI_MODEL"), "ACTMAP_AI_MODEL");
 const fallback = process.env.ACTMAP_AI_FALLBACK_MODEL?.trim();
+
+const checkpointer = PostgresSaver.fromConnString(
+  required("SUPABASE_DB_URL"),
+);
 
 export const agent = createDeepAgent({
   name: "actmap-agent",
   model: chat(primary),
   tools: TOOLS,
   systemPrompt: SYSTEM_PROMPT,
+  checkpointer,
   middleware: fallback
-    ? [
-        modelFallbackMiddleware(
-          chat(pinned(fallback, "ACTMAP_AI_FALLBACK_MODEL")),
-        ),
-      ]
+    ? [modelFallbackMiddleware(
+        chat(pinned(fallback, "ACTMAP_AI_FALLBACK_MODEL")),
+      )]
     : [],
 });
+
+let setupPromise: Promise<void> | undefined;
+
+export async function getAgent() {
+  if (!setupPromise) {
+    setupPromise = checkpointer.setup();
+  }
+
+  await setupPromise;
+  return agent;
+}
